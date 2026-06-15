@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 import os
 from dotenv import load_dotenv
-    
+
 load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -33,9 +33,9 @@ def _format_record(record: dict) -> str:
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "👋 <b>Following Inflation Bot</b>\n\n"
-        "Comandos disponibles:\n"
-        "/rates — Tasas de cambio actuales\n"
-        "/history [n] — Últimos <i>n</i> registros (por defecto 5)",
+        "Available commands:\n"
+        "/rates — Current exchange rates\n"
+        "/history [n] — Last <i>n</i> records (default 5)",
         parse_mode="HTML",
     )
 
@@ -45,14 +45,14 @@ async def cmd_rates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         response = await client.get(f"{API_BASE_URL}/rates/latest")
 
     if response.status_code == 404:
-        await update.message.reply_text("⚠️ No hay datos disponibles aún.")
+        await update.message.reply_text("⚠️ No data available yet.")
         return
 
     response.raise_for_status()
     record = response.json()
 
     await update.message.reply_text(
-        f"📊 <b>Tasas actuales</b>\n\n{_format_record(record)}",
+        f"📊 <b>Current rates</b>\n\n{_format_record(record)}",
         parse_mode="HTML",
     )
 
@@ -71,10 +71,10 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     records = response.json()
 
     if not records:
-        await update.message.reply_text("⚠️ No hay historial disponible aún.")
+        await update.message.reply_text("⚠️ No history available yet.")
         return
 
-    parts = [f"📈 <b>Últimos {len(records)} registros</b>\n"]
+    parts = [f"📈 <b>Last {len(records)} records</b>\n"]
     for record in records:
         parts.append(_format_record(record))
         parts.append("─" * 20)
