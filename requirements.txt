@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+apscheduler
+requests
+beautifulsoup4
+python-telegram-bot
+httpx
