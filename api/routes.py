@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -37,3 +39,29 @@ def fetch_rates():
 
     _scrape_and_save()
     return {"message": "Rates fetched and saved successfully"}
+
+
+VALID_CURRENCIES = {"usd", "euro", "mlc", "cad", "mxn", "zelle", "cla"}
+
+
+@router.get(
+    "/history/{currency}", summary="Get historical values for a single currency"
+)
+def currency_history(currency: str, months: int = 3, db: Session = Depends(get_db)):
+    if currency not in VALID_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid currency. Valid options: {', '.join(sorted(VALID_CURRENCIES))}",
+        )
+    since = datetime.utcnow() - timedelta(days=months * 30)
+    records = (
+        db.query(ExchangeRateRecord)
+        .filter(ExchangeRateRecord.timestamp >= since)
+        .order_by(ExchangeRateRecord.timestamp.asc())
+        .all()
+    )
+    return [
+        {"timestamp": r.timestamp.isoformat(), "value": getattr(r, currency)}
+        for r in records
+        if getattr(r, currency) is not None
+    ]

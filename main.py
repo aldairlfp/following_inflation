@@ -24,6 +24,24 @@ def _scrape_and_save():
     db = SessionLocal()
     try:
         rates = get_rate()
+        last_rates = (
+            db.query(ExchangeRateRecord)
+            .order_by(ExchangeRateRecord.timestamp.desc())
+            .first()
+        )
+
+        if rates == {
+            "usd": last_rates.usd,
+            "euro": last_rates.euro,
+            "mlc": last_rates.mlc,
+            "cad": last_rates.cad,
+            "mxn": last_rates.mxn,
+            "zelle": last_rates.zelle,
+            "cla": last_rates.cla,
+        }:
+            logger.info("No changes in rates, skipping save.")
+            return
+
         record = ExchangeRateRecord(**rates)
         db.add(record)
         db.commit()
@@ -39,7 +57,7 @@ def _scrape_and_save():
 async def lifespan(app: FastAPI):
     # --- scraper scheduler ---
     _scrape_and_save()
-    scheduler.add_job(_scrape_and_save, "interval", hours=6, id="scrape_rates")
+    scheduler.add_job(_scrape_and_save, "interval", hours=1, id="scrape_rates")
     scheduler.start()
 
     # --- telegram bot ---
