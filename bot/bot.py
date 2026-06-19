@@ -131,7 +131,7 @@ async def cmd_graph(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ax.set_xlabel("Date")
     ax.set_ylabel("CUP")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-    ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=10))
     fig.autofmt_xdate()
     ax.grid(True, linestyle="--", alpha=0.4)
     fig.tight_layout()
