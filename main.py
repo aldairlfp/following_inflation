@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -30,7 +31,7 @@ def _scrape_and_save():
             .first()
         )
 
-        if rates == {
+        if last_rates is not None and rates == {
             "usd": last_rates.usd,
             "euro": last_rates.euro,
             "mlc": last_rates.mlc,

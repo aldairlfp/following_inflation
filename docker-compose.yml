@@ -10,5 +10,20 @@ services:
     volumes:
       - db_data:/app/data
 
+  backup:
+    image: alpine:3.21
+    depends_on:
+      - app
+    volumes:
+      - db_data:/data:ro
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    command: >
+      sh -c "apk add --no-cache sqlite &&
+             chmod +x /backup.sh &&
+             echo '0 6,18 * * * /bin/sh /backup.sh >> /backups/backup.log 2>&1' | crontab - &&
+             crond -f -d 8"
+    restart: unless-stopped
+
 volumes:
   db_data:
