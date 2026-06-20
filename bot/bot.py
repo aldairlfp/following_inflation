@@ -1,4 +1,5 @@
 import io
+from datetime import datetime
 
 import httpx
 import matplotlib
@@ -43,7 +44,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Available commands:\n"
         "/rates — Current exchange rates\n"
         "/history [n] — Last <i>n</i> records (default 5)\n"
-        "/graph [currency] — Price chart for the last 3 months (default: usd)",
+        "/graph [currency|all] — Price chart for the last 3 months (default: usd)",
         parse_mode="HTML",
     )
 
@@ -91,22 +92,28 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def cmd_graph(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    currency = context.args[0].lower() if context.args else "usd"
+    arg = context.args[0].lower() if context.args else "usd"
     valid = set(CURRENCY_LABELS.keys())
 
-    if currency not in valid:
+    if arg not in valid and arg != "all":
         await update.message.reply_text(
-            f"⚠️ Unknown currency <b>{currency}</b>.\n"
-            f"Valid options: {', '.join(sorted(valid))}",
+            f"⚠️ Unknown currency <b>{arg}</b>.\n"
+            f"Valid options: {', '.join(sorted(valid))}, all",
             parse_mode="HTML",
         )
         return
 
+    if arg == "all":
+        await _graph_all(update)
+    else:
+        await _graph_single(update, arg)
+
+
+async def _graph_single(update, currency: str) -> None:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{API_BASE_URL}/rates/history/{currency}", params={"months": 3}
         )
-
     response.raise_for_status()
     data = response.json()
 
@@ -114,11 +121,8 @@ async def cmd_graph(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("⚠️ Not enough data to plot a graph yet.")
         return
 
-    timestamps = [
-        __import__("datetime").datetime.fromisoformat(d["timestamp"]) for d in data
-    ]
+    timestamps = [datetime.fromisoformat(d["timestamp"]) for d in data]
     values = [d["value"] for d in data]
-
     padding = (max(values) - min(values)) * 0.1 or 1
 
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -144,6 +148,63 @@ async def cmd_graph(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_photo(
         photo=buf,
         caption=f"📈 {CURRENCY_LABELS[currency]} exchange rate — last 3 months",
+    )
+
+
+PALETTE = ["#4e8df5", "#f5824e", "#4ef59a", "#f5e04e", "#c44ef5", "#f54e4e", "#4ef5f0"]
+
+
+async def _graph_all(update) -> None:
+    async with httpx.AsyncClient() as client:
+        responses = {
+            currency: await client.get(
+                f"{API_BASE_URL}/rates/history/{currency}", params={"months": 3}
+            )
+            for currency in CURRENCY_LABELS
+        }
+
+    series = {}
+    for currency, response in responses.items():
+        response.raise_for_status()
+        data = response.json()
+        if len(data) >= 2:
+            series[currency] = (
+                [datetime.fromisoformat(d["timestamp"]) for d in data],
+                [d["value"] for d in data],
+            )
+
+    if not series:
+        await update.message.reply_text("⚠️ Not enough data to plot a graph yet.")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for (currency, (timestamps, values)), color in zip(series.items(), PALETTE):
+        ax.plot(
+            timestamps,
+            values,
+            linewidth=1.6,
+            color=color,
+            label=CURRENCY_LABELS[currency],
+        )
+
+    ax.set_title("All currencies — Last 3 months (CUP)", fontsize=14, pad=12)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("CUP")
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=10))
+    fig.autofmt_xdate()
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="upper left", fontsize=9)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    plt.close(fig)
+    buf.seek(0)
+
+    await update.message.reply_photo(
+        photo=buf,
+        caption="📈 All currencies exchange rates — last 3 months",
     )
 
 
