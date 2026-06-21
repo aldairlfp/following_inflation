@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.handlers
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
@@ -12,7 +13,20 @@ from database.database import Base, SessionLocal, engine
 from database.models import ExchangeRateRecord
 from scraper.scraper import get_rate
 
-logging.basicConfig(level=logging.INFO)
+_log_handler = logging.handlers.RotatingFileHandler(
+    "app.log", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+)
+_log_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        _log_handler,
+        logging.StreamHandler(),  # keep console output as well
+    ],
+)
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
