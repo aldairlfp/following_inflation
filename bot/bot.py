@@ -1,5 +1,6 @@
 import io
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import matplotlib
@@ -29,8 +30,17 @@ CURRENCY_LABELS = {
 }
 
 
+HAVANA = ZoneInfo("America/Havana")
+
+
+def _to_havana(ts: str) -> datetime:
+    dt = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+    return dt.astimezone(HAVANA).replace(tzinfo=None)  # naive local time for matplotlib
+
+
 def _format_record(record: dict) -> str:
-    lines = [f"🕐 {record['timestamp'][:16].replace('T', ' ')} UTC\n"]
+    local = _to_havana(record["timestamp"])
+    lines = [f"🕐 {local.strftime('%Y-%m-%d %H:%M')} (Cuba)\n"]
     for field, label in CURRENCY_LABELS.items():
         value = record.get(field)
         if value is not None:
@@ -121,7 +131,7 @@ async def _graph_single(update, currency: str) -> None:
         await update.message.reply_text("⚠️ Not enough data to plot a graph yet.")
         return
 
-    timestamps = [datetime.fromisoformat(d["timestamp"]) for d in data]
+    timestamps = [_to_havana(d["timestamp"]) for d in data]
     values = [d["value"] for d in data]
     padding = (max(values) - min(values)) * 0.1 or 1
 
@@ -169,7 +179,7 @@ async def _graph_all(update) -> None:
         data = response.json()
         if len(data) >= 2:
             series[currency] = (
-                [datetime.fromisoformat(d["timestamp"]) for d in data],
+                [_to_havana(d["timestamp"]) for d in data],
                 [d["value"] for d in data],
             )
 
