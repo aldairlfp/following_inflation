@@ -32,12 +32,12 @@ def latest_rates(db: Session = Depends(get_db)):
 
 
 @router.post("/fetch", summary="Manually trigger a scrape and save")
-def fetch_rates():
+async def fetch_rates():
     from main import (
         _scrape_and_save,
     )  # imported here to avoid circular import at module level
 
-    _scrape_and_save()
+    await _scrape_and_save()
     return {"message": "Rates fetched and saved successfully"}
 
 

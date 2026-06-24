@@ -34,11 +34,11 @@ Base.metadata.create_all(bind=engine)
 scheduler = AsyncIOScheduler()
 
 
-def _scrape_and_save():
+async def _scrape_and_save():
     """Fetch exchange rates from the scraper and persist them to the database."""
     db = SessionLocal()
     try:
-        rates = get_rate()
+        rates = await asyncio.to_thread(get_rate)
         last_rates = (
             db.query(ExchangeRateRecord)
             .order_by(ExchangeRateRecord.timestamp.desc())
@@ -71,8 +71,14 @@ def _scrape_and_save():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- scraper scheduler ---
-    _scrape_and_save()
-    scheduler.add_job(_scrape_and_save, "interval", hours=1, id="scrape_rates")
+    await _scrape_and_save()
+    scheduler.add_job(
+        _scrape_and_save,
+        "interval",
+        hours=1,
+        id="scrape_rates",
+        misfire_grace_time=None,  # never skip a missed firing
+    )
     scheduler.start()
 
     # --- telegram bot ---
