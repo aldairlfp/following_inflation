@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -47,12 +48,35 @@ VALID_CURRENCIES = {"usd", "euro", "mlc", "cad", "mxn", "zelle", "cla"}
 @router.get(
     "/history/{currency}", summary="Get historical values for a single currency"
 )
-def currency_history(currency: str, months: int = 3, db: Session = Depends(get_db)):
+def currency_history(
+    currency: str,
+    months: int = 3,
+    days: int | None = None,
+    db: Session = Depends(get_db),
+):
     if currency not in VALID_CURRENCIES:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid currency. Valid options: {', '.join(sorted(VALID_CURRENCIES))}",
         )
+
+    if days is not None:
+        # Hourly mode: return every record for the last N days
+        days = max(1, min(days, 14))
+        since = datetime.utcnow() - timedelta(days=days)
+        records = (
+            db.query(ExchangeRateRecord)
+            .filter(ExchangeRateRecord.timestamp >= since)
+            .order_by(ExchangeRateRecord.timestamp.asc())
+            .all()
+        )
+        return [
+            {"timestamp": r.timestamp.isoformat(), "value": getattr(r, currency)}
+            for r in records
+            if getattr(r, currency) is not None
+        ]
+
+    # Daily-average mode: one averaged value per calendar day
     since = datetime.utcnow() - timedelta(days=months * 30)
     records = (
         db.query(ExchangeRateRecord)
@@ -60,8 +84,12 @@ def currency_history(currency: str, months: int = 3, db: Session = Depends(get_d
         .order_by(ExchangeRateRecord.timestamp.asc())
         .all()
     )
+    daily: dict[str, list[float]] = defaultdict(list)
+    for r in records:
+        value = getattr(r, currency)
+        if value is not None:
+            daily[r.timestamp.date().isoformat()].append(value)
     return [
-        {"timestamp": r.timestamp.isoformat(), "value": getattr(r, currency)}
-        for r in records
-        if getattr(r, currency) is not None
+        {"timestamp": f"{day}T00:00:00", "value": sum(vs) / len(vs)}
+        for day, vs in sorted(daily.items())
     ]

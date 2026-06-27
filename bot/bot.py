@@ -54,7 +54,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Available commands:\n"
         "/rates — Current exchange rates\n"
         "/history [n] — Last <i>n</i> records (default 5)\n"
-        "/graph [currency|all] — Price chart for the last 3 months (default: usd)",
+        "/graph [currency|all] [days] — Exchange rate chart\n"
+        "  • /graph usd — daily avg, last 3 months\n"
+        "  • /graph usd 7 — hourly, last 7 days\n"
+        "  • /graph all — all currencies, last 3 months",
         parse_mode="HTML",
     )
 
@@ -113,16 +116,33 @@ async def cmd_graph(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
+    try:
+        days = int(context.args[1]) if len(context.args) > 1 else None
+        if days is not None:
+            days = max(1, min(days, 14))
+    except (ValueError, IndexError):
+        days = None
+
     if arg == "all":
-        await _graph_all(update)
+        await _graph_all(update, days)
     else:
-        await _graph_single(update, arg)
+        await _graph_single(update, arg, days)
 
 
-async def _graph_single(update, currency: str) -> None:
+async def _graph_single(update, currency: str, days: int | None) -> None:
+    if days is not None:
+        params = {"days": days}
+        title = f"{CURRENCY_LABELS[currency]} — Last {days}d hourly (CUP)"
+        caption = f"📈 {CURRENCY_LABELS[currency]} — last {days} days (hourly)"
+        date_fmt = "%b %d %H:%M"
+    else:
+        params = {"months": 3}
+        title = f"{CURRENCY_LABELS[currency]} — Last 3 months, daily avg (CUP)"
+        caption = f"📈 {CURRENCY_LABELS[currency]} — last 3 months (daily avg)"
+        date_fmt = "%b %d"
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{API_BASE_URL}/rates/history/{currency}", params={"months": 3}
+            f"{API_BASE_URL}/rates/history/{currency}", params=params
         )
     response.raise_for_status()
     data = response.json()
@@ -139,12 +159,10 @@ async def _graph_single(update, currency: str) -> None:
     ax.plot(timestamps, values, linewidth=1.8, color="#4e8df5")
     ax.fill_between(timestamps, values, alpha=0.15, color="#4e8df5")
     ax.set_ylim(min(values) - padding, max(values) + padding)
-    ax.set_title(
-        f"{CURRENCY_LABELS[currency]} — Last 3 months (CUP)", fontsize=14, pad=12
-    )
+    ax.set_title(title, fontsize=14, pad=12)
     ax.set_xlabel("Date")
     ax.set_ylabel("CUP")
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(date_fmt))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=10))
     fig.autofmt_xdate()
     ax.grid(True, linestyle="--", alpha=0.4)
@@ -168,7 +186,7 @@ async def _graph_all(update) -> None:
     async with httpx.AsyncClient() as client:
         responses = {
             currency: await client.get(
-                f"{API_BASE_URL}/rates/history/{currency}", params={"months": 3}
+                f"{API_BASE_URL}/rates/history/{currency}", params=params
             )
             for currency in CURRENCY_LABELS
         }
@@ -197,10 +215,10 @@ async def _graph_all(update) -> None:
             label=CURRENCY_LABELS[currency],
         )
 
-    ax.set_title("All currencies — Last 3 months (CUP)", fontsize=14, pad=12)
+    ax.set_title(title, fontsize=14, pad=12)
     ax.set_xlabel("Date")
     ax.set_ylabel("CUP")
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter(date_fmt))
     ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=10))
     fig.autofmt_xdate()
     ax.grid(True, linestyle="--", alpha=0.4)
@@ -214,7 +232,7 @@ async def _graph_all(update) -> None:
 
     await update.message.reply_photo(
         photo=buf,
-        caption="📈 All currencies exchange rates — last 3 months",
+        caption=caption,
     )
 
 
